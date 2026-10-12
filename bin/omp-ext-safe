@@ -1,0 +1,20 @@
+#!/bin/sh
+# Bun runs the bunfig.toml preload and loads the .env of the directory it starts in, before any
+# script code. Start it from an empty directory so a project cannot run code inside the launcher,
+# and hand the real working directory over in OMP_EXTENSION_GUARD_LAUNCH_CWD.
+set -e
+self=$0
+while [ -L "$self" ]; do
+	link=$(readlink "$self")
+	case $link in
+	/*) self=$link ;;
+	*) self=$(dirname "$self")/$link ;;
+	esac
+done
+bin_dir=$(CDPATH= cd -- "$(dirname -- "$self")" && pwd -P)
+launch_dir=${XDG_STATE_HOME:-$HOME/.local/state}/omp-extension-guard/launch
+mkdir -p "$launch_dir"
+OMP_EXTENSION_GUARD_LAUNCH_CWD=$PWD
+export OMP_EXTENSION_GUARD_LAUNCH_CWD
+cd "$launch_dir"
+exec bun --no-env-file "$bin_dir/omp-ext-safe.ts" "$@"

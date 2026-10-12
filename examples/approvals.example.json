@@ -1,0 +1,18 @@
+{
+	"items": {
+		"project:.omp/extensions/dx-helper": {
+			"kind": "extension",
+			"source": "https://github.com/example/dx-helper",
+			"commit": "0123456789abcdef0123456789abcdef01234567",
+			"reviewer": "platform-team",
+			"scripts": ["scripts/setup.sh"]
+		},
+		"project:.omp/tools/format-check.ts": {
+			"kind": "tool",
+			"source": "https://github.com/example/format-check",
+			"version": "1.4.0",
+			"reviewer": "platform-team"
+		}
+	},
+	"revoked": ["project:.omp/tools/old-helper.ts"]
+}

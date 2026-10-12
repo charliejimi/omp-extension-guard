@@ -1,0 +1,33 @@
+# A pull-request job that fails when startup code omp would load is new, changed, moved, renamed,
+# or revoked. The allowlist and public key come from outside the repository under review.
+name: omp startup code
+
+on:
+  pull_request:
+
+jobs:
+  extension-guard:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.2
+      - name: Install omp-extension-guard outside the checkout
+        run: |
+          git clone --depth 1 https://example.test/omp-extension-guard.git "$RUNNER_TEMP/omp-extension-guard"
+          cd "$RUNNER_TEMP/omp-extension-guard" && bun install --frozen-lockfile
+      - name: Fetch the signed allowlist
+        run: |
+          curl -fsSLo "$RUNNER_TEMP/extensions.allow.json" "$ALLOWLIST_URL"
+          curl -fsSLo "$RUNNER_TEMP/extensions.allow.json.sig" "$ALLOWLIST_URL.sig"
+        env:
+          ALLOWLIST_URL: ${{ vars.EXTENSION_GUARD_ALLOWLIST_URL }}
+      - name: Check
+        run: |
+          printf '%s\n' "$PUBLIC_KEY" > "$RUNNER_TEMP/extension-guard.pub.pem"
+          "$RUNNER_TEMP/omp-extension-guard/bin/omp-extension-guard" check \
+            --allowlist "$RUNNER_TEMP/extensions.allow.json" \
+            --public-key "$RUNNER_TEMP/extension-guard.pub.pem"
+        env:
+          PUBLIC_KEY: ${{ vars.EXTENSION_GUARD_PUBLIC_KEY }}

@@ -1,0 +1,14 @@
+{
+	"allowlists": ["~/.cache/omp-extension-guard/extensions.allow.json"],
+	"publicKeys": ["~/.config/omp-extension-guard/extension-guard.pub.pem"],
+	"mode": "trusted",
+	"isolation": "warn",
+	"accept": [],
+	"passEnv": [],
+	"placeholder": "proxy-managed",
+	"onUnapproved": "ask",
+	"auditLog": "~/.local/state/omp-extension-guard/audit.jsonl",
+	"protect": [],
+	"allowWrite": [],
+	"omp": ["omp"]
+}
