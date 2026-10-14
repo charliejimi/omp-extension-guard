@@ -10,7 +10,7 @@ import type { ExtensionAPI, ExtensionContext, ExtensionFactory, ToolInfo } from 
 import { type UnitKind, digestUnit, loadTrustedAllowlists } from "./allowlist";
 import { type GuardConfig, defaultAuditLog, defaultConfigPath, loadConfig } from "./config";
 import { type ScopeContext, displayPath, keyPath, scopeKey } from "./keys";
-import { type BashContext, type Protection, type Verdict, astEditTouchesProtected, bashVerdict, evalVerdict, isProtectedPath, protection, realPathOf, writeTargets } from "./policy";
+import { type BashContext, type Protection, type Verdict, astEditTouchesProtected, bashVerdict, evalVerdict, expandOmpPath, isProtectedPath, protection, realPathOf, writeTargets } from "./policy";
 
 /** A unit the launcher (or a verified allowlist) approved, pinned to its digest. */
 export interface ApprovedUnit {
@@ -164,14 +164,14 @@ export function createExtensionGuard(options: ExtensionGuardOptions = {}): Exten
 			const info = pi.getAllTools().find(tool => tool.name === toolName);
 			if (info && !isExpected(info)) return { ok: false, rule: "unapproved-tool" };
 			const p = currentProtection();
-			const targets = writeTargets(toolName, input);
+			const targets = writeTargets(toolName, input, p.ctx.home);
 			for (const target of targets ?? []) {
 				const touches = toolName === "ast_edit" ? astEditTouchesProtected(target, cwd, p) : isProtectedPath(target, cwd, p);
 				if (touches) return { ok: false, rule: "protected-write", location: scopeKey(path.resolve(cwd, target), scope) };
 			}
 			const args = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
 			if (toolName === "bash" && typeof args.command === "string") {
-				const base = typeof args.cwd === "string" ? path.resolve(cwd, args.cwd) : cwd;
+				const base = typeof args.cwd === "string" ? path.resolve(cwd, expandOmpPath(args.cwd, p.ctx.home)) : cwd;
 				return bashVerdict(args.command, base, bashContext());
 			}
 			if (toolName === "eval" && typeof args.code === "string") return evalVerdict(args.code, p);

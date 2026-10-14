@@ -92,6 +92,30 @@ describe("writes into places omp loads code from", () => {
 		expect(await blocked(guard, "write", { path: "src/plugins/sneaky.ts", content: "x" })).toBe(true);
 	});
 
+	it("are blocked when spelled the way omp's write and edit tools accept them", async () => {
+		const { guard } = await world();
+		// omp unwraps a hashline header, strips a stray leading ":" or "@", and expands "~" (also
+		// "~name") before it writes, so each of these writes a place omp loads code from.
+		for (const target of [
+			"[.omp/extensions/planted.ts]",
+			"[.omp/tools/planted.ts#1A2B]",
+			":./bunfig.toml",
+			`@${path.join(agentDir(), "extensions", "planted.ts")}`,
+			"~.config/omp-extension-guard/config.json",
+		]) {
+			expect({ target, blocked: await blocked(guard, "write", { path: target, content: "x" }) }).toEqual({ target, blocked: true });
+		}
+		for (const target of ["[src/app.ts]", ":./src/app.ts", "@my-file.txt"]) {
+			expect({ target, blocked: await blocked(guard, "write", { path: target, content: "x" }) }).toEqual({ target, blocked: false });
+		}
+		const multi = "*** Begin Patch\n[README.md#1A2B]\nPUT 1.=1:\n+x\n[.omp/config.yml#3C4D]\nPUT 1.=1:\n+y\n*** End Patch\n";
+		expect(await blocked(guard, "edit", { input: multi, paths: ["README.md", ".omp/config.yml"] })).toBe(true);
+		expect(await blocked(guard, "edit", { input: multi.replace(".omp/config.yml", "src/b.ts"), paths: ["README.md", "src/b.ts"] })).toBe(false);
+		const move = (dest: string) => ({ input: `*** Begin Patch\n[src/seed.ts#1A2B]\nMV ${dest}\n*** End Patch\n`, path: "src/seed.ts", paths: ["src/seed.ts"] });
+		expect(await blocked(guard, "edit", move(".omp/extensions/planted.ts"))).toBe(true);
+		expect(await blocked(guard, "edit", move("src/moved.ts"))).toBe(false);
+	});
+
 	it("honors an explicit allowWrite exception and extra protected paths", async () => {
 		const { guard } = await world({ allowWrite: [".omp/extensions/dev-tool.ts"], protect: ["deploy/"] });
 		expect(await blocked(guard, "write", { path: ".omp/extensions/dev-tool.ts", content: "x" })).toBe(false);
@@ -131,6 +155,14 @@ describe("bash and eval", () => {
 			"git status && npm test": false,
 		});
 		expect(await blocked(guard, "bash", { command: "touch extensions/x.ts", cwd: ".omp" })).toBe(true);
+	});
+
+	it("resolve the bash cwd the way omp does, so a cwd spelled ~, @, or : still counts", async () => {
+		const { guard, p } = await world();
+		for (const cwd of ["~/.omp/agent/extensions", `@${path.join(p.cwd, ".omp", "extensions")}`, ":./.omp/extensions"]) {
+			expect({ cwd, blocked: await blocked(guard, "bash", { command: "touch x.ts", cwd }) }).toEqual({ cwd, blocked: true });
+		}
+		expect(await blocked(guard, "bash", { command: "touch x.ts", cwd: ":./src" })).toBe(false);
 	});
 
 	it("block an extension's script once anything in its unit changed after approval", async () => {

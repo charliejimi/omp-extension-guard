@@ -1,6 +1,6 @@
 {
 	"name": "omp-extension-guard",
-	"version": "0.1.0",
+	"version": "0.1.1",
 	"private": true,
 	"description": "An oh-my-pi (omp) package that keeps unreviewed extension code from running in omp's process: a read-only inventory of every module omp would load at startup, a signed list of approved extensions, a launcher (omp-ext-safe) that checks credential exposure and starts omp with only the approved extensions, and a guard that keeps the agent from planting code where omp auto-loads it.",
 	"type": "module",

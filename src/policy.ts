@@ -116,15 +116,56 @@ function asStrings(value: unknown): string[] {
 }
 
 const PATCH_FILE_LINE = /^\*\*\* (?:Add File|Update File|Delete File|Move to):\s*(.+?)\s*$/gm;
+// A hashline section's `MV DEST` moves the section's file; the destination never appears in omp's
+// `paths`, only here. Structural ops sit at column 0, so a leading anchor avoids apply_patch's
+// space-prefixed context lines and `+`-prefixed bodies.
+const HASHLINE_MOVE = /^MV[ \t]+(.+?)[ \t]*$/gm;
+const HASHLINE_TAG = /#[0-9A-Fa-f]{4}$/;
 
-/** The paths a write, edit, or ast_edit call would write; `undefined` for other tools. */
-export function writeTargets(toolName: string, input: unknown): string[] | undefined {
+function stripOneQuotePair(value: string): string {
+	const t = value.trim();
+	return t.length >= 2 && (t[0] === '"' || t[0] === "'") && t[t.length - 1] === t[0] ? t.slice(1, -1) : t;
+}
+
+/** omp's write/edit tools unwrap a hashline header `[path]` / `[path#TAG]` before resolving. */
+function unwrapHashlineHeader(target: string): string {
+	const trimmed = target.trimEnd();
+	if (trimmed.length < 2 || trimmed[0] !== "[" || trimmed[trimmed.length - 1] !== "]") return target;
+	const inner = trimmed.slice(1, -1);
+	const tag = HASHLINE_TAG.exec(inner);
+	const pathPart = tag ? inner.slice(0, tag.index) : inner;
+	return pathPart.length === 0 || pathPart.includes("#") ? target : pathPart;
+}
+
+/**
+ * Expands a path the way omp resolves a tool's path or `cwd` before using it: strip a stray leading
+ * `:` or `@`, then expand `~` — including a bare `~name`, which omp reads as home-relative. The
+ * guard must judge the place omp will use; otherwise `:./bunfig.toml`, `@/abs/.omp`, or
+ * `~.config/...` reach a protected place while a naive resolve treats them as ordinary paths.
+ */
+export function expandOmpPath(raw: string, home: string): string {
+	let target = raw;
+	if (/^:(?=[/\\~]|\.\.?[/\\]|[A-Za-z]:)/.test(target)) target = target.slice(1);
+	if (target.startsWith("@")) {
+		const rest = target.slice(1);
+		if (rest === "~" || rest.startsWith("/") || rest.startsWith("~/") || rest.startsWith("~\\") || path.win32.isAbsolute(rest)) target = rest;
+	}
+	if (target === "~") return home;
+	if (target.startsWith("~/") || target.startsWith("~\\")) return home + target.slice(1);
+	if (target.startsWith("~")) return path.join(home, target.slice(1));
+	return target;
+}
+
+/** The paths a write, edit, or ast_edit call would write, as omp resolves them; `undefined` for other tools. */
+export function writeTargets(toolName: string, input: unknown, home: string): string[] | undefined {
 	const args = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
+	const resolve = (target: string) => expandOmpPath(unwrapHashlineHeader(target), home);
 	switch (toolName) {
 		case "write":
-			return asStrings(args.path);
+			return asStrings(args.path).map(resolve);
 		case "edit": {
-			const targets = asStrings(args.path);
+			// For a multi-file hashline patch omp fills only `paths`, not `path`.
+			const targets = [...asStrings(args.path), ...asStrings(args.paths)];
 			if (Array.isArray(args.edits)) {
 				for (const edit of args.edits) {
 					if (edit && typeof edit === "object") {
@@ -132,13 +173,16 @@ export function writeTargets(toolName: string, input: unknown): string[] | undef
 					}
 				}
 			}
-			for (const text of [...asStrings(args.input), ...asStrings(args.patch)]) {
+			for (const text of [...asStrings(args.input), ...asStrings(args._input), ...asStrings(args.patch)]) {
 				for (const match of text.matchAll(PATCH_FILE_LINE)) targets.push(match[1]!);
+				for (const match of text.matchAll(HASHLINE_MOVE)) targets.push(stripOneQuotePair(match[1]!));
 			}
-			return targets;
+			return [...new Set(targets.map(resolve))];
 		}
 		case "ast_edit":
-			return asStrings(args.paths).flatMap(entry => entry.split(";").map(item => item.trim()).filter(Boolean));
+			return asStrings(args.paths)
+				.flatMap(entry => entry.split(";").map(item => item.trim()).filter(Boolean))
+				.map(resolve);
 		default:
 			return undefined;
 	}

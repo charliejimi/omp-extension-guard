@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.1.1] - 2026-10-14
+
+### Fixed
+
+- Write protection resolves `write`, `edit`, and `ast_edit` targets the way omp's tools do: a hashline header (`[path]`, `[path#TAG]`) is unwrapped, a stray leading `:` or `@` is dropped, and `~name` is read as home-relative. `[.omp/extensions/x.ts]`, `:./bunfig.toml`, `@<agent dir>/extensions/x.ts`, and `~.config/omp-extension-guard/config.json` are now blocked like the plain paths.
+- Hashline `edit`: every file header of a multi-file patch and every `MV` destination is checked.
+- A `bash` call's `cwd` is resolved the way omp resolves it (`~`, a leading `@` or `:`), so a command run from `~/.omp/agent/extensions` is judged there.
+
 ## [0.1.0] - 2026-10-12
 
 ### Added
